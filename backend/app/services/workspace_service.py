@@ -295,3 +295,79 @@ async def get_workspace_members(
             "user_display_name": user.display_name,
         })
     return members
+
+
+async def get_workspace_admin_stats(
+    db: AsyncSession, workspace_id: uuid.UUID, user_id: uuid.UUID
+) -> dict:
+    """Get admin statistics for a workspace. Requires admin role."""
+    from app.models.task import Task
+
+    await require_membership(db, workspace_id, user_id, MemberRole.ADMIN)
+
+    workspace = await get_workspace_by_id(db, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Get member count
+    member_result = await db.execute(
+        select(func.count(WorkspaceMember.user_id)).where(
+            WorkspaceMember.workspace_id == workspace_id
+        )
+    )
+    member_count = member_result.scalar() or 0
+
+    # Get task statistics
+    task_stats_result = await db.execute(
+        select(Task.status, func.count(Task.id))
+        .where(Task.workspace_id == workspace_id)
+        .group_by(Task.status)
+    )
+    task_stats = {row[0]: row[1] for row in task_stats_result.all()}
+
+    total_tasks = sum(task_stats.values())
+
+    # Get recent activity count (last 7 days)
+    from datetime import timedelta
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    activity_result = await db.execute(
+        select(func.count(ActivityLog.id)).where(
+            ActivityLog.workspace_id == workspace_id,
+            ActivityLog.created_at >= seven_days_ago,
+        )
+    )
+    recent_activity_count = activity_result.scalar() or 0
+
+    # Get members with roles breakdown
+    role_breakdown_result = await db.execute(
+        select(WorkspaceMember.role, func.count(WorkspaceMember.user_id))
+        .where(WorkspaceMember.workspace_id == workspace_id)
+        .group_by(WorkspaceMember.role)
+    )
+    role_breakdown = {
+        row[0].value if isinstance(row[0], MemberRole) else row[0]: row[1]
+        for row in role_breakdown_result.all()
+    }
+
+    return {
+        "workspace": {
+            "id": workspace.id,
+            "name": workspace.name,
+            "description": workspace.description,
+            "owner_id": workspace.owner_id,
+            "created_at": workspace.created_at,
+            "updated_at": workspace.updated_at,
+        },
+        "stats": {
+            "member_count": member_count,
+            "total_tasks": total_tasks,
+            "tasks_by_status": {
+                "todo": task_stats.get("todo", 0),
+                "in_progress": task_stats.get("in_progress", 0),
+                "review": task_stats.get("review", 0),
+                "done": task_stats.get("done", 0),
+            },
+            "recent_activity_count": recent_activity_count,
+            "role_breakdown": role_breakdown,
+        },
+    }

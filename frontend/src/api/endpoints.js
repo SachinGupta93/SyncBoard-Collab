@@ -37,3 +37,7 @@ export const getWorkspaceActivity = (workspaceId, limit = 50, offset = 0) =>
   api.get(`/workspaces/${workspaceId}/activity`, { params: { limit, offset } });
 export const getTaskActivity = (taskId, limit = 50) =>
   api.get(`/tasks/${taskId}/activity`, { params: { limit } });
+
+// Admin
+export const getAdminStats = (workspaceId) =>
+  api.get(`/workspaces/${workspaceId}/admin/stats`);

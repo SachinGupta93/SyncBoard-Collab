@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Board from './pages/Board';
+import AdminDashboard from './pages/AdminDashboard';
 import { LogOut, LayoutDashboard } from 'lucide-react';
 import './index.css';
 
@@ -104,6 +105,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <AppLayout>
               <Board />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/:workspaceId"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <AdminDashboard />
             </AppLayout>
           </ProtectedRoute>
         }

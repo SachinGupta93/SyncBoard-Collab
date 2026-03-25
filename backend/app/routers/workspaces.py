@@ -21,6 +21,7 @@ from app.services.workspace_service import (
     remove_member,
     get_workspace_members,
     require_membership,
+    get_workspace_admin_stats,
 )
 from app.middleware.auth import get_current_user
 from app.models.user import User
@@ -101,6 +102,16 @@ async def delete_workspace_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     await delete_workspace(db, workspace_id, current_user.id)
+
+
+@router.get("/{workspace_id}/admin/stats")
+async def get_admin_stats(
+    workspace_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get admin statistics for a workspace. Requires admin role."""
+    return await get_workspace_admin_stats(db, workspace_id, current_user.id)
 
 
 # --- Members ---

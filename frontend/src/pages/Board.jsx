@@ -22,6 +22,7 @@ import {
   Activity,
   Users,
   GripVertical,
+  Settings,
 } from 'lucide-react';
 
 const COLUMNS = [
@@ -313,6 +314,16 @@ export default function Board() {
           >
             <Activity size={18} />
           </button>
+
+          {myRole === 'admin' && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => navigate(`/admin/${workspaceId}`)}
+              title="Admin Dashboard"
+            >
+              <Settings size={18} />
+            </button>
+          )}
 
           {canEdit && (
             <button className="btn btn-primary btn-sm" onClick={() => openCreateModal()}>
