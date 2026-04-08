@@ -4,7 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://syncboard:syncboard_secret_2024@localhost:5432/syncboard_db"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./syncboard.db"
 
     # JWT
     JWT_SECRET_KEY: str = "syncboard-dev-jwt-secret-key-2024"
