@@ -1,6 +1,6 @@
 # SyncBoard Collab
 
-Real-time collaborative workspace & task management system built with React, FastAPI, and PostgreSQL. 
+Real-time collaborative workspace & task management system built with React, FastAPI, and SQLite. 
 
 > **Note:** This project is designed to run natively on your local machine. **No Docker** or third-party message brokers like Redis are required!
 
@@ -21,7 +21,7 @@ Real-time collaborative workspace & task management system built with React, Fas
 |-------|------------|
 | Frontend | React (Vite) |
 | Backend | FastAPI (Python) |
-| Database | PostgreSQL |
+| Database | SQLite |
 | Auth | JWT (bcrypt + jose) |
 
 ## 🏁 Quick Start Guide
@@ -31,32 +31,13 @@ Follow these instructions to get the project running on your local machine.
 ### Prerequisites
 - **Python 3.10+**
 - **Node.js 18+**
-- **PostgreSQL 15+**
+- No external database server required
 
 ---
 
 ### Step 1: Database Setup
 
-First, you need to create the database and user in PostgreSQL. Open your terminal and run `psql -U postgres` (enter your postgres password when prompted), then execute:
-
-```sql
--- 1. Create the database
-CREATE DATABASE syncboard_db;
-
--- 2. Create the user with a password
-CREATE USER syncboard WITH ENCRYPTED PASSWORD 'syncboard_secret_2024';
-
--- 3. Connect to the new database
-\c syncboard_db
-
--- 4. Grant necessary permissions (Crucial for Postgres 15+)
-GRANT ALL ON SCHEMA public TO syncboard;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO syncboard;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO syncboard;
-
--- 5. Exit psql
-\q
-```
+The backend uses a local SQLite file named `syncboard.db`. It is created automatically on first startup, so there is nothing to provision manually.
 
 ---
 
@@ -74,11 +55,8 @@ cp .env.example .env
 
 Ensure your `.env` contains the correct database URL:
 ```env
-# PostgreSQL (local)
-POSTGRES_USER=syncboard
-POSTGRES_PASSWORD=syncboard_secret_2024
-POSTGRES_DB=syncboard_db
-DATABASE_URL=postgresql+asyncpg://syncboard:syncboard_secret_2024@localhost:5432/syncboard_db
+# SQLite (local)
+DATABASE_URL=sqlite+aiosqlite:///./syncboard.db
 
 # JWT
 JWT_SECRET_KEY=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
