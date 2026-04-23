@@ -76,6 +76,7 @@ export default function Register() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
+              autoComplete="new-password"
             />
           </div>
           <button type="submit" className="btn btn-primary" disabled={loading}>
