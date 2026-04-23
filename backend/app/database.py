@@ -1,6 +1,10 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from app.config import get_settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -41,6 +45,15 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
-    """Create all tables — used for dev/initial setup."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Create all tables — used for dev/initial setup.
+    Handles race conditions when multiple workers start simultaneously
+    and try to create PostgreSQL ENUM types concurrently.
+    """
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except (IntegrityError, ProgrammingError) as e:
+        if "already exists" in str(e):
+            logger.warning("DB schema race condition (safe to ignore): %s", e.orig)
+        else:
+            raise
