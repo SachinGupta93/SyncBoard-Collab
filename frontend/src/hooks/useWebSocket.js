@@ -10,8 +10,16 @@ export function useWebSocket(workspaceId, token, onMessage) {
   const connect = useCallback(() => {
     if (!workspaceId || !token) return;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/${workspaceId}?token=${token}`;
+    const wsBase = import.meta.env.VITE_WS_URL;
+    let wsUrl;
+    if (wsBase) {
+      // Production: connect directly to backend
+      wsUrl = `${wsBase}/ws/${workspaceId}?token=${token}`;
+    } else {
+      // Local dev: use Vite proxy through same host
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}/ws/${workspaceId}?token=${token}`;
+    }
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
