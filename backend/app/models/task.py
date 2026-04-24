@@ -54,3 +54,6 @@ class Task(Base):
     activity_logs = relationship(
         "ActivityLog", back_populates="task", cascade="all, delete-orphan"
     )
+    comments = relationship(
+        "Comment", back_populates="task", cascade="all, delete-orphan"
+    )

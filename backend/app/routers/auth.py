@@ -6,6 +6,7 @@ from app.schemas.user import (
     UserLogin,
     UserResponse,
     TokenResponse,
+    UserUpdateProfile,
 )
 from app.services.auth_service import register_user, login_user
 from app.middleware.auth import get_current_user
@@ -36,4 +37,17 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)):
+    return UserResponse.model_validate(current_user)
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_profile(
+    data: UserUpdateProfile,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if data.display_name is not None:
+        current_user.display_name = data.display_name
+    await db.commit()
+    await db.refresh(current_user)
     return UserResponse.model_validate(current_user)

@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Board from './pages/Board';
 import AdminDashboard from './pages/AdminDashboard';
+import Profile from './pages/Profile';
 import { LogOut, LayoutDashboard, Sun, Moon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import './index.css';
@@ -61,14 +62,14 @@ function AppLayout({ children }) {
           <button className="btn btn-ghost" onClick={toggleTheme} title="Toggle theme">
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
-          <div className="avatar" title={user?.display_name}>
+          <a href="/profile" className="avatar" title={user?.display_name} style={{ textDecoration: 'none' }}>
             {user?.display_name
               ?.split(' ')
               .map((n) => n[0])
               .join('')
               .toUpperCase()
               .slice(0, 2) || '?'}
-          </div>
+          </a>
           <button className="btn btn-ghost" onClick={logout} title="Sign out">
             <LogOut size={16} />
           </button>
@@ -87,6 +88,7 @@ function AppRoutes() {
       <Route path="/dashboard" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
       <Route path="/board/:workspaceId" element={<ProtectedRoute><AppLayout><Board /></AppLayout></ProtectedRoute>} />
       <Route path="/admin/:workspaceId" element={<ProtectedRoute><AppLayout><AdminDashboard /></AppLayout></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" />} />
     </Routes>
   );

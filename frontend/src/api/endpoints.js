@@ -41,3 +41,11 @@ export const getTaskActivity = (taskId, limit = 50) =>
 // Admin
 export const getAdminStats = (workspaceId) =>
   api.get(`/workspaces/${workspaceId}/admin/stats`);
+
+// Comments
+export const getComments = (taskId) => api.get(`/tasks/${taskId}/comments`);
+export const addComment = (taskId, data) => api.post(`/tasks/${taskId}/comments`, data);
+export const deleteComment = (commentId) => api.delete(`/tasks/comments/${commentId}`);
+
+// Profile
+export const updateProfile = (data) => api.put('/auth/me', data);

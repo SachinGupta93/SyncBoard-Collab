@@ -37,3 +37,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class UserUpdateProfile(BaseModel):
+    display_name: str | None = Field(None, min_length=1, max_length=100)
