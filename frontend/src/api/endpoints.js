@@ -49,3 +49,10 @@ export const deleteComment = (commentId) => api.delete(`/tasks/comments/${commen
 
 // Profile
 export const updateProfile = (data) => api.put('/auth/me', data);
+
+// Invites
+export const createInvite = (workspaceId, data) => api.post(`/workspaces/${workspaceId}/invites`, data);
+export const getInvites = (workspaceId) => api.get(`/workspaces/${workspaceId}/invites`);
+export const getInviteByToken = (token) => api.get(`/invites/${token}`);
+export const acceptInvite = (token) => api.post(`/invites/${token}/accept`);
+export const revokeInvite = (inviteId) => api.delete(`/invites/${inviteId}`);

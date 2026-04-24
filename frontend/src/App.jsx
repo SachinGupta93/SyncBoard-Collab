@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Board from './pages/Board';
 import AdminDashboard from './pages/AdminDashboard';
 import Profile from './pages/Profile';
+import AcceptInvite from './pages/AcceptInvite';
 import { LogOut, LayoutDashboard, Sun, Moon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import './index.css';
@@ -89,6 +90,7 @@ function AppRoutes() {
       <Route path="/board/:workspaceId" element={<ProtectedRoute><AppLayout><Board /></AppLayout></ProtectedRoute>} />
       <Route path="/admin/:workspaceId" element={<ProtectedRoute><AppLayout><AdminDashboard /></AppLayout></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />
+      <Route path="/invite/:token" element={<AcceptInvite />} />
       <Route path="*" element={<Navigate to="/dashboard" />} />
     </Routes>
   );

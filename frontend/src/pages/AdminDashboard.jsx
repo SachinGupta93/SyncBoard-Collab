@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import {
   getWorkspace,
   getMembers,
@@ -11,6 +12,9 @@ import {
   deleteWorkspace,
   getWorkspaceActivity,
   getAdminStats,
+  createInvite,
+  getInvites,
+  revokeInvite,
 } from '../api/endpoints';
 import {
   ArrowLeft,
@@ -30,12 +34,16 @@ import {
   Clock,
   ListTodo,
   AlertCircle,
+  Link2,
+  Copy,
+  Mail,
 } from 'lucide-react';
 
 export default function AdminDashboard() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const toast = useToast();
 
   const [workspace, setWorkspace] = useState(null);
   const [members, setMembers] = useState([]);
@@ -53,6 +61,13 @@ export default function AdminDashboard() {
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberRole, setNewMemberRole] = useState('viewer');
   const [addingMember, setAddingMember] = useState(false);
+
+  // Invite state
+  const [invites, setInvites] = useState([]);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('viewer');
+  const [sendingInvite, setSendingInvite] = useState(false);
 
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -84,8 +99,14 @@ export default function AdminDashboard() {
         name: wsRes.data.name,
         description: wsRes.data.description || '',
       });
+
+      // Load invites
+      try {
+        const invRes = await getInvites(workspaceId);
+        setInvites(invRes.data);
+      } catch { /* invites may not be available */ }
     } catch (err) {
-      console.error('Failed to load admin dashboard:', err);
+      toast.error('Failed to load admin dashboard');
       if (err.response?.status === 403) {
         navigate(`/board/${workspaceId}`);
       }
@@ -100,8 +121,9 @@ export default function AdminDashboard() {
       const res = await updateWorkspace(workspaceId, editForm);
       setWorkspace({ ...workspace, ...res.data });
       setIsEditing(false);
+      toast.success('Workspace updated');
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to update workspace');
+      toast.error(err.response?.data?.detail || 'Failed to update workspace');
     }
   };
 
@@ -109,9 +131,10 @@ export default function AdminDashboard() {
     if (deleteConfirmText !== workspace.name) return;
     try {
       await deleteWorkspace(workspaceId);
+      toast.success('Workspace deleted');
       navigate('/dashboard');
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to delete workspace');
+      toast.error(err.response?.data?.detail || 'Failed to delete workspace');
     }
   };
 
@@ -125,8 +148,9 @@ export default function AdminDashboard() {
       setShowAddMember(false);
       setNewMemberEmail('');
       setNewMemberRole('viewer');
+      toast.success('Member added successfully');
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to add member');
+      toast.error(err.response?.data?.detail || 'Failed to add member');
     } finally {
       setAddingMember(false);
     }
@@ -136,8 +160,9 @@ export default function AdminDashboard() {
     try {
       await updateMemberRole(workspaceId, userId, { role: newRole });
       setMembers(members.map((m) => (m.user_id === userId ? { ...m, role: newRole } : m)));
+      toast.success('Role updated');
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to update role');
+      toast.error(err.response?.data?.detail || 'Failed to update role');
     }
   };
 
@@ -146,8 +171,9 @@ export default function AdminDashboard() {
     try {
       await removeMember(workspaceId, userId);
       setMembers(members.filter((m) => m.user_id !== userId));
+      toast.success(`${displayName} removed from workspace`);
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to remove member');
+      toast.error(err.response?.data?.detail || 'Failed to remove member');
     }
   };
 
@@ -234,6 +260,16 @@ export default function AdminDashboard() {
         >
           <Activity size={16} />
           Activity
+        </button>
+        <button
+          className={`admin-tab ${activeTab === 'invites' ? 'active' : ''}`}
+          onClick={() => setActiveTab('invites')}
+        >
+          <Mail size={16} />
+          Invites
+          {invites.filter(i => i.status === 'pending').length > 0 && (
+            <span className="filter-badge">{invites.filter(i => i.status === 'pending').length}</span>
+          )}
         </button>
         <button
           className={`admin-tab ${activeTab === 'settings' ? 'active' : ''}`}
@@ -569,6 +605,126 @@ export default function AdminDashboard() {
       )}
 
       {/* Delete Confirmation Modal */}
+
+      {/* Invites Tab Content */}
+      {activeTab === 'invites' && (
+        <div>
+          <div className="members-header">
+            <h2>Invitations ({invites.length})</h2>
+            <button className="btn btn-primary" onClick={() => setShowInviteModal(true)}>
+              <Mail size={16} /> Send Invite
+            </button>
+          </div>
+
+          {invites.length === 0 ? (
+            <div className="empty-state">
+              <div className="icon">✉️</div>
+              <h3>No invites sent yet</h3>
+              <p>Send invite links to bring teammates into this workspace</p>
+            </div>
+          ) : (
+            <div className="activity-feed">
+              {invites.map((inv) => {
+                const inviteUrl = `${window.location.origin}/invite/${inv.token}`;
+                return (
+                  <div key={inv.id} className="activity-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div className="avatar avatar-sm">
+                        <Mail size={14} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <strong>{inv.email}</strong>
+                        <span className={`badge badge-${inv.role}`} style={{ marginLeft: 8 }}>{inv.role}</span>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
+                          {inv.status === 'pending' ? 'Pending' : inv.status === 'accepted' ? '✓ Accepted' : inv.status}
+                        </div>
+                      </div>
+                      {inv.status === 'pending' && (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn btn-ghost btn-sm" title="Copy invite link"
+                            onClick={() => { navigator.clipboard.writeText(inviteUrl); toast.success('Invite link copied!'); }}>
+                            <Copy size={14} />
+                          </button>
+                          <button className="btn btn-ghost btn-sm" title="Revoke invite"
+                            onClick={async () => { await revokeInvite(inv.id); setInvites(invites.filter(i => i.id !== inv.id)); toast.info('Invite revoked'); }}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {inv.status === 'pending' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                        background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                        <Link2 size={12} />
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inviteUrl}</span>
+                        <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: '0.7rem' }}
+                          onClick={() => { navigator.clipboard.writeText(inviteUrl); toast.success('Link copied!'); }}>
+                          Copy
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Send Invite Modal */}
+      {showInviteModal && (
+        <div className="modal-overlay" onClick={() => setShowInviteModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Send Invite</h2>
+              <button className="btn btn-ghost" onClick={() => setShowInviteModal(false)}><X size={18} /></button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setSendingInvite(true);
+              try {
+                const res = await createInvite(workspaceId, { email: inviteEmail, role: inviteRole });
+                setInvites([res.data, ...invites]);
+                setShowInviteModal(false);
+                setInviteEmail('');
+                setInviteRole('viewer');
+                const inviteUrl = `${window.location.origin}/invite/${res.data.token}`;
+                navigator.clipboard.writeText(inviteUrl);
+                toast.success('Invite created! Link copied to clipboard');
+              } catch (err) {
+                toast.error(err.response?.data?.detail || 'Failed to send invite');
+              } finally {
+                setSendingInvite(false);
+              }
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="input-group">
+                  <label>Email Address</label>
+                  <input className="input" type="email" placeholder="teammate@example.com"
+                    value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} required autoFocus />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                    We'll save this email so you can send invitations later
+                  </span>
+                </div>
+                <div className="input-group">
+                  <label>Role</label>
+                  <select className="input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+                    <option value="admin">Admin - Full access</option>
+                    <option value="editor">Editor - Can edit tasks</option>
+                    <option value="viewer">Viewer - Read only</option>
+                  </select>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowInviteModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={sendingInvite}>
+                  <Mail size={16} /> {sendingInvite ? 'Sending...' : 'Create Invite Link'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {showDeleteConfirm && (
         <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
