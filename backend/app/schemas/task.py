@@ -1,9 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from pydantic import BaseModel, Field
 
 
 VALID_STATUSES = ["todo", "in_progress", "done", "review"]
+VALID_PRIORITIES = ["low", "medium", "high", "urgent"]
 
 
 class TaskCreate(BaseModel):
@@ -11,6 +12,8 @@ class TaskCreate(BaseModel):
     description: str | None = None
     status: str = "todo"
     assigned_to: uuid.UUID | None = None
+    priority: str = "medium"
+    due_date: date | None = None
     position: int = 0
 
 
@@ -19,6 +22,8 @@ class TaskUpdate(BaseModel):
     description: str | None = None
     status: str | None = None
     assigned_to: uuid.UUID | None = None
+    priority: str | None = None
+    due_date: date | None = None
     position: int | None = None
     version: int  # Required for conflict resolution
 
@@ -36,6 +41,8 @@ class TaskResponse(BaseModel):
     description: str | None = None
     status: str
     assigned_to: uuid.UUID | None = None
+    priority: str = "medium"
+    due_date: date | None = None
     position: int
     version: int
     created_by: uuid.UUID

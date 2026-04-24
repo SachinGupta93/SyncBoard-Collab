@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
@@ -18,6 +18,8 @@ async def create_task(
     description: str | None = None,
     task_status: str = "todo",
     assigned_to: uuid.UUID | None = None,
+    priority: str = "medium",
+    due_date: date | None = None,
     position: int = 0,
 ) -> Task:
     await require_membership(db, workspace_id, user_id, MemberRole.EDITOR)
@@ -28,6 +30,8 @@ async def create_task(
         description=description,
         status=task_status,
         assigned_to=assigned_to,
+        priority=priority,
+        due_date=due_date,
         position=position,
         created_by=user_id,
     )
@@ -39,7 +43,7 @@ async def create_task(
         workspace_id=workspace_id,
         user_id=user_id,
         action_type="task_created",
-        details={"title": title, "status": task_status},
+        details={"title": title, "status": task_status, "priority": priority},
     )
     db.add(log)
 
@@ -88,6 +92,8 @@ async def get_workspace_tasks(
             "description": task.description,
             "status": task.status,
             "assigned_to": task.assigned_to,
+            "priority": task.priority,
+            "due_date": task.due_date,
             "position": task.position,
             "version": task.version,
             "created_by": task.created_by,
@@ -113,6 +119,8 @@ async def update_task(
     description: str | None = None,
     task_status: str | None = None,
     assigned_to: uuid.UUID | None = None,
+    priority: str | None = None,
+    due_date: date | None = None,
     position: int | None = None,
 ) -> Task:
     task = await get_task_by_id(db, task_id)
@@ -148,6 +156,15 @@ async def update_task(
             "to": str(assigned_to),
         }
         task.assigned_to = assigned_to
+    if priority is not None and priority != task.priority:
+        changes["priority"] = {"from": task.priority, "to": priority}
+        task.priority = priority
+    if due_date is not None and due_date != task.due_date:
+        changes["due_date"] = {
+            "from": str(task.due_date) if task.due_date else None,
+            "to": str(due_date),
+        }
+        task.due_date = due_date
     if position is not None and position != task.position:
         changes["position"] = {"from": task.position, "to": position}
         task.position = position

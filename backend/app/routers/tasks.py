@@ -42,6 +42,8 @@ async def create_task_endpoint(
         data.description,
         data.status,
         data.assigned_to,
+        data.priority,
+        data.due_date,
         data.position,
     )
     return TaskResponse.model_validate(task)
@@ -91,6 +93,8 @@ async def update_task_endpoint(
         data.description,
         data.status,
         data.assigned_to,
+        data.priority,
+        data.due_date,
         data.position,
     )
     return TaskResponse.model_validate(task)

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useToast } from '../context/ToastContext';
 import {
   getTasks,
   createTask,
@@ -13,16 +14,9 @@ import {
   getWorkspaceActivity,
 } from '../api/endpoints';
 import {
-  Plus,
-  ArrowLeft,
-  Trash2,
-  Edit3,
-  Clock,
-  User,
-  Activity,
-  Users,
-  GripVertical,
-  Settings,
+  Plus, ArrowLeft, Trash2, Edit3, Clock, User, Activity,
+  Users, GripVertical, Settings, Search, Filter, AlertTriangle,
+  Calendar, Flag,
 } from 'lucide-react';
 
 const COLUMNS = [
@@ -32,10 +26,18 @@ const COLUMNS = [
   { id: 'done', label: 'Done', color: 'var(--col-done)' },
 ];
 
+const PRIORITIES = [
+  { id: 'low', label: 'Low', color: '#64748b' },
+  { id: 'medium', label: 'Medium', color: '#f59e0b' },
+  { id: 'high', label: 'High', color: '#f97316' },
+  { id: 'urgent', label: 'Urgent', color: '#ef4444' },
+];
+
 export default function Board() {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
   const { user, token } = useAuth();
+  const toast = useToast();
 
   const [workspace, setWorkspace] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -44,18 +46,22 @@ export default function Board() {
   const [loading, setLoading] = useState(true);
   const [myRole, setMyRole] = useState(null);
 
+  // Search & Filter
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterAssignee, setFilterAssignee] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+
   // Task modal
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [taskForm, setTaskForm] = useState({
-    title: '',
-    description: '',
-    status: 'todo',
-    assigned_to: '',
+    title: '', description: '', status: 'todo',
+    assigned_to: '', priority: 'medium', due_date: '',
   });
 
   // Side panel
-  const [sidePanel, setSidePanel] = useState(null); // 'members' | 'activity' | null
+  const [sidePanel, setSidePanel] = useState(null);
 
   // Drag state
   const [draggedTask, setDraggedTask] = useState(null);
@@ -82,7 +88,6 @@ export default function Board() {
 
   const { isConnected, onlineUsers } = useWebSocket(workspaceId, token, handleWSMessage);
 
-  // Fetch data
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -98,7 +103,7 @@ export default function Board() {
         setActivity(actRes.data);
         setMyRole(wsRes.data.my_role);
       } catch (err) {
-        console.error('Failed to load board:', err);
+        toast.error('Failed to load board');
         if (err.response?.status === 403) navigate('/dashboard');
       } finally {
         setLoading(false);
@@ -116,13 +121,14 @@ export default function Board() {
       const res = await createTask(workspaceId, {
         ...taskForm,
         assigned_to: taskForm.assigned_to || null,
+        due_date: taskForm.due_date || null,
       });
       setTasks([...tasks, res.data]);
       setShowTaskModal(false);
       resetTaskForm();
+      toast.success('Task created successfully');
     } catch (err) {
-      console.error('Failed to create task:', err);
-      alert(err.response?.data?.detail || 'Failed to create task');
+      toast.error(err.response?.data?.detail || 'Failed to create task');
     }
   };
 
@@ -132,19 +138,21 @@ export default function Board() {
       const res = await updateTask(editingTask.id, {
         ...taskForm,
         assigned_to: taskForm.assigned_to || null,
+        due_date: taskForm.due_date || null,
         version: editingTask.version,
       });
       setTasks(tasks.map((t) => (t.id === res.data.id ? res.data : t)));
       setShowTaskModal(false);
       setEditingTask(null);
       resetTaskForm();
+      toast.success('Task updated successfully');
     } catch (err) {
       if (err.response?.status === 409) {
-        alert('Conflict: This task was modified by another user. Refreshing...');
+        toast.warning('Conflict: This task was modified by another user. Refreshing...');
         const tasksRes = await getTasks(workspaceId);
         setTasks(tasksRes.data);
       } else {
-        alert(err.response?.data?.detail || 'Failed to update task');
+        toast.error(err.response?.data?.detail || 'Failed to update task');
       }
     }
   };
@@ -154,13 +162,14 @@ export default function Board() {
     try {
       await deleteTask(taskId);
       setTasks(tasks.filter((t) => t.id !== taskId));
+      toast.success('Task deleted');
     } catch (err) {
-      console.error('Failed to delete task:', err);
+      toast.error('Failed to delete task');
     }
   };
 
   const resetTaskForm = () => {
-    setTaskForm({ title: '', description: '', status: 'todo', assigned_to: '' });
+    setTaskForm({ title: '', description: '', status: 'todo', assigned_to: '', priority: 'medium', due_date: '' });
   };
 
   const openEditModal = (task) => {
@@ -170,17 +179,19 @@ export default function Board() {
       description: task.description || '',
       status: task.status,
       assigned_to: task.assigned_to || '',
+      priority: task.priority || 'medium',
+      due_date: task.due_date || '',
     });
     setShowTaskModal(true);
   };
 
   const openCreateModal = (status = 'todo') => {
     setEditingTask(null);
-    setTaskForm({ title: '', description: '', status, assigned_to: '' });
+    setTaskForm({ title: '', description: '', status, assigned_to: '', priority: 'medium', due_date: '' });
     setShowTaskModal(true);
   };
 
-  // Drag & Drop (native HTML5 DnD)
+  // Drag & Drop
   const handleDragStart = (e, task) => {
     setDraggedTask(task);
     e.dataTransfer.effectAllowed = 'move';
@@ -199,65 +210,76 @@ export default function Board() {
     setDragOverColumn(columnId);
   };
 
-  const handleDragLeave = () => {
-    setDragOverColumn(null);
-  };
+  const handleDragLeave = () => setDragOverColumn(null);
 
   const handleDrop = async (e, columnId) => {
     e.preventDefault();
     setDragOverColumn(null);
     if (!draggedTask || draggedTask.status === columnId) return;
 
-    // Optimistic update
     const oldTasks = [...tasks];
-    setTasks(
-      tasks.map((t) =>
-        t.id === draggedTask.id ? { ...t, status: columnId } : t
-      )
-    );
+    setTasks(tasks.map((t) => t.id === draggedTask.id ? { ...t, status: columnId } : t));
 
     try {
       const res = await moveTaskAPI(draggedTask.id, {
-        status: columnId,
-        position: 0,
-        version: draggedTask.version,
+        status: columnId, position: 0, version: draggedTask.version,
       });
-      setTasks((prev) =>
-        prev.map((t) => (t.id === res.data.id ? res.data : t))
-      );
+      setTasks((prev) => prev.map((t) => (t.id === res.data.id ? res.data : t)));
+      toast.info(`Task moved to ${COLUMNS.find(c => c.id === columnId)?.label}`);
     } catch (err) {
-      // Rollback on error
       setTasks(oldTasks);
       if (err.response?.status === 409) {
-        alert('Conflict: Refreshing board...');
+        toast.warning('Conflict: Refreshing board...');
         const tasksRes = await getTasks(workspaceId);
         setTasks(tasksRes.data);
       }
     }
   };
 
-  const getTasksByStatus = (status) =>
-    tasks.filter((t) => t.status === status);
+  // Filtering
+  const getFilteredTasksByStatus = (status) => {
+    return tasks.filter((t) => {
+      if (t.status !== status) return false;
+      if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          !(t.description || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      if (filterPriority && t.priority !== filterPriority) return false;
+      if (filterAssignee && String(t.assigned_to) !== filterAssignee) return false;
+      return true;
+    });
+  };
+
+  const activeFilterCount = [filterPriority, filterAssignee].filter(Boolean).length;
 
   const getInitials = (name) => {
     if (!name) return '?';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+    return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
   const timeAgo = (dateStr) => {
-    const now = new Date();
-    const date = new Date(dateStr);
-    const seconds = Math.floor((now - date) / 1000);
+    const seconds = Math.floor((new Date() - new Date(dateStr)) / 1000);
     if (seconds < 60) return 'just now';
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
   };
+
+  const isOverdue = (dueDate) => {
+    if (!dueDate) return false;
+    return new Date(dueDate) < new Date(new Date().toDateString());
+  };
+
+  const formatDueDate = (dueDate) => {
+    if (!dueDate) return null;
+    const d = new Date(dueDate);
+    const today = new Date(new Date().toDateString());
+    const diff = Math.ceil((d - today) / 86400000);
+    if (diff < 0) return `${Math.abs(diff)}d overdue`;
+    if (diff === 0) return 'Due today';
+    if (diff === 1) return 'Due tomorrow';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const getPriorityInfo = (p) => PRIORITIES.find((pr) => pr.id === p) || PRIORITIES[1];
 
   if (loading) {
     return (
@@ -300,54 +322,74 @@ export default function Board() {
             </div>
           )}
 
-          <button
-            className={`btn btn-ghost ${sidePanel === 'members' ? 'active' : ''}`}
-            onClick={() => setSidePanel(sidePanel === 'members' ? null : 'members')}
-            title="Members"
-          >
+          <button className={`btn btn-ghost ${sidePanel === 'members' ? 'active' : ''}`}
+            onClick={() => setSidePanel(sidePanel === 'members' ? null : 'members')} title="Members">
             <Users size={18} />
           </button>
-          <button
-            className={`btn btn-ghost ${sidePanel === 'activity' ? 'active' : ''}`}
-            onClick={() => setSidePanel(sidePanel === 'activity' ? null : 'activity')}
-            title="Activity"
-          >
+          <button className={`btn btn-ghost ${sidePanel === 'activity' ? 'active' : ''}`}
+            onClick={() => setSidePanel(sidePanel === 'activity' ? null : 'activity')} title="Activity">
             <Activity size={18} />
           </button>
 
           {myRole === 'admin' && (
-            <button
-              className="btn btn-ghost"
-              onClick={() => navigate(`/admin/${workspaceId}`)}
-              title="Admin Dashboard"
-            >
+            <button className="btn btn-ghost" onClick={() => navigate(`/admin/${workspaceId}`)} title="Admin Dashboard">
               <Settings size={18} />
             </button>
           )}
 
           {canEdit && (
             <button className="btn btn-primary btn-sm" onClick={() => openCreateModal()}>
-              <Plus size={16} />
-              Add Task
+              <Plus size={16} /> Add Task
             </button>
           )}
         </div>
       </div>
 
-      {/* Main board area with optional side panel */}
+      {/* Search & Filter Bar */}
+      <div className="board-toolbar">
+        <div className="search-box">
+          <Search size={16} />
+          <input type="text" placeholder="Search tasks..." value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)} className="search-input" />
+        </div>
+        <button className={`btn btn-ghost btn-sm ${showFilters ? 'active' : ''}`}
+          onClick={() => setShowFilters(!showFilters)}>
+          <Filter size={16} /> Filters
+          {activeFilterCount > 0 && <span className="filter-badge">{activeFilterCount}</span>}
+        </button>
+        {(searchQuery || activeFilterCount > 0) && (
+          <button className="btn btn-ghost btn-sm"
+            onClick={() => { setSearchQuery(''); setFilterPriority(''); setFilterAssignee(''); }}>
+            Clear all
+          </button>
+        )}
+      </div>
+
+      {showFilters && (
+        <div className="filter-row">
+          <select className="input filter-select" value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}>
+            <option value="">All Priorities</option>
+            {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+          <select className="input filter-select" value={filterAssignee}
+            onChange={(e) => setFilterAssignee(e.target.value)}>
+            <option value="">All Members</option>
+            {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.user_display_name}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Main board area */}
       <div style={{ display: 'flex', gap: 20, overflow: 'hidden' }}>
-        {/* Kanban Columns */}
         <div className="kanban-container" style={{ flex: 1 }}>
           {COLUMNS.map((col) => {
-            const colTasks = getTasksByStatus(col.id);
+            const colTasks = getFilteredTasksByStatus(col.id);
             return (
-              <div
-                key={col.id}
-                className="kanban-column"
+              <div key={col.id} className="kanban-column"
                 onDragOver={(e) => handleDragOver(e, col.id)}
                 onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, col.id)}
-              >
+                onDrop={(e) => handleDrop(e, col.id)}>
                 <div className="column-header">
                   <div className="column-header-left">
                     <div className="column-dot" style={{ background: col.color }}></div>
@@ -355,66 +397,62 @@ export default function Board() {
                     <span className="column-count">{colTasks.length}</span>
                   </div>
                   {canEdit && (
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => openCreateModal(col.id)}
-                      title={`Add to ${col.label}`}
-                    >
+                    <button className="btn btn-ghost btn-sm" onClick={() => openCreateModal(col.id)} title={`Add to ${col.label}`}>
                       <Plus size={14} />
                     </button>
                   )}
                 </div>
-                <div
-                  className={`column-tasks ${dragOverColumn === col.id ? 'drag-over' : ''}`}
-                >
+                <div className={`column-tasks ${dragOverColumn === col.id ? 'drag-over' : ''}`}>
                   {colTasks.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
                       No tasks
                     </div>
                   )}
-                  {colTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="task-card"
-                      draggable={canEdit}
-                      onDragStart={(e) => handleDragStart(e, task)}
-                      onDragEnd={handleDragEnd}
-                    >
-                      {canEdit && (
-                        <div style={{ position: 'absolute', top: 8, left: 6, color: 'var(--text-tertiary)', opacity: 0.3 }}>
-                          <GripVertical size={14} />
-                        </div>
-                      )}
-                      <h4>{task.title}</h4>
-                      {task.description && (
-                        <p className="task-desc">{task.description}</p>
-                      )}
-                      <div className="task-card-footer">
-                        <div className="task-meta">
-                          {task.assignee_name && (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                              <User size={12} />
-                              {task.assignee_name}
-                            </span>
-                          )}
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <Clock size={12} />
-                            {timeAgo(task.updated_at)}
-                          </span>
-                        </div>
+                  {colTasks.map((task) => {
+                    const pri = getPriorityInfo(task.priority);
+                    const overdue = isOverdue(task.due_date);
+                    return (
+                      <div key={task.id} className={`task-card ${overdue ? 'task-overdue' : ''}`}
+                        draggable={canEdit} onDragStart={(e) => handleDragStart(e, task)}
+                        onDragEnd={handleDragEnd}>
                         {canEdit && (
-                          <div className="task-card-actions">
-                            <button onClick={() => openEditModal(task)} title="Edit">
-                              <Edit3 size={12} />
-                            </button>
-                            <button onClick={() => handleDeleteTask(task.id)} title="Delete">
-                              <Trash2 size={12} />
-                            </button>
+                          <div style={{ position: 'absolute', top: 8, left: 6, color: 'var(--text-tertiary)', opacity: 0.3 }}>
+                            <GripVertical size={14} />
                           </div>
                         )}
+                        <div className="task-card-top">
+                          <span className="priority-dot" style={{ background: pri.color }} title={pri.label}></span>
+                          {task.due_date && (
+                            <span className={`due-badge ${overdue ? 'overdue' : ''}`}>
+                              {overdue && <AlertTriangle size={10} />}
+                              <Calendar size={10} />
+                              {formatDueDate(task.due_date)}
+                            </span>
+                          )}
+                        </div>
+                        <h4>{task.title}</h4>
+                        {task.description && <p className="task-desc">{task.description}</p>}
+                        <div className="task-card-footer">
+                          <div className="task-meta">
+                            {task.assignee_name && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <User size={12} /> {task.assignee_name}
+                              </span>
+                            )}
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                              <Clock size={12} /> {timeAgo(task.updated_at)}
+                            </span>
+                          </div>
+                          {canEdit && (
+                            <div className="task-card-actions">
+                              <button onClick={() => openEditModal(task)} title="Edit"><Edit3 size={12} /></button>
+                              <button onClick={() => handleDeleteTask(task.id)} title="Delete"><Trash2 size={12} /></button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -423,44 +461,24 @@ export default function Board() {
 
         {/* Side Panel */}
         {sidePanel && (
-          <div
-            style={{
-              width: 320,
-              flexShrink: 0,
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border-primary)',
-              borderRadius: 'var(--radius-lg)',
-              padding: 20,
-              maxHeight: 'calc(100vh - 180px)',
-              overflowY: 'auto',
-              animation: 'slideInRight 0.3s ease',
-            }}
-          >
+          <div style={{
+            width: 320, flexShrink: 0, background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-lg)',
+            padding: 20, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto',
+            animation: 'slideInRight 0.3s ease',
+          }}>
             {sidePanel === 'members' && (
               <>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 16 }}>
-                  Members ({members.length})
-                </h3>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 16 }}>Members ({members.length})</h3>
                 <div className="members-list">
                   {members.map((m) => {
-                    const isOnline = onlineUsers.some(
-                      (u) => u.user_id === String(m.user_id)
-                    );
+                    const isOnline = onlineUsers.some((u) => u.user_id === String(m.user_id));
                     return (
                       <div key={m.user_id} className="member-item">
                         <div style={{ position: 'relative' }}>
-                          <div className="avatar avatar-sm">
-                            {getInitials(m.user_display_name)}
-                          </div>
-                          <span
-                            className={`status-dot ${isOnline ? 'online' : 'offline'}`}
-                            style={{
-                              position: 'absolute',
-                              bottom: -1,
-                              right: -1,
-                              border: '2px solid var(--bg-secondary)',
-                            }}
-                          ></span>
+                          <div className="avatar avatar-sm">{getInitials(m.user_display_name)}</div>
+                          <span className={`status-dot ${isOnline ? 'online' : 'offline'}`}
+                            style={{ position: 'absolute', bottom: -1, right: -1, border: '2px solid var(--bg-secondary)' }}></span>
                         </div>
                         <div className="member-info">
                           <h4>{m.user_display_name}</h4>
@@ -473,29 +491,20 @@ export default function Board() {
                 </div>
               </>
             )}
-
             {sidePanel === 'activity' && (
               <>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 16 }}>
-                  Recent Activity
-                </h3>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 16 }}>Recent Activity</h3>
                 <div className="activity-feed">
                   {activity.length === 0 && (
-                    <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
-                      No activity yet
-                    </p>
+                    <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>No activity yet</p>
                   )}
                   {activity.map((a) => (
                     <div key={a.id} className="activity-item">
-                      <div className="avatar avatar-sm">
-                        {getInitials(a.user_display_name)}
-                      </div>
+                      <div className="avatar avatar-sm">{getInitials(a.user_display_name)}</div>
                       <div className="activity-text">
                         <strong>{a.user_display_name}</strong>{' '}
                         {a.action_type.replace(/_/g, ' ')}
-                        {a.task_title && (
-                          <> — <em>{a.task_title}</em></>
-                        )}
+                        {a.task_title && (<> — <em>{a.task_title}</em></>)}
                         <div className="activity-time">{timeAgo(a.created_at)}</div>
                       </div>
                     </div>
@@ -513,75 +522,55 @@ export default function Board() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingTask ? 'Edit Task' : 'Create Task'}</h2>
-              <button
-                className="btn btn-ghost"
-                onClick={() => { setShowTaskModal(false); setEditingTask(null); resetTaskForm(); }}
-              >
-                ✕
-              </button>
+              <button className="btn btn-ghost" onClick={() => { setShowTaskModal(false); setEditingTask(null); resetTaskForm(); }}>✕</button>
             </div>
             <form onSubmit={editingTask ? handleUpdateTask : handleCreateTask}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div className="input-group">
                   <label>Title</label>
-                  <input
-                    className="input"
-                    placeholder="Task title"
-                    value={taskForm.title}
-                    onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
-                    required
-                    autoFocus
-                  />
+                  <input className="input" placeholder="Task title" value={taskForm.title}
+                    onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} required autoFocus />
                 </div>
                 <div className="input-group">
                   <label>Description</label>
-                  <textarea
-                    className="input"
-                    placeholder="Describe the task..."
-                    value={taskForm.description}
-                    onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
-                  />
+                  <textarea className="input" placeholder="Describe the task..." value={taskForm.description}
+                    onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} />
                 </div>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div className="input-group" style={{ flex: 1 }}>
                     <label>Status</label>
-                    <select
-                      className="input"
-                      value={taskForm.status}
-                      onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value })}
-                    >
-                      {COLUMNS.map((col) => (
-                        <option key={col.id} value={col.id}>
-                          {col.label}
-                        </option>
-                      ))}
+                    <select className="input" value={taskForm.status}
+                      onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value })}>
+                      {COLUMNS.map((col) => <option key={col.id} value={col.id}>{col.label}</option>)}
                     </select>
                   </div>
                   <div className="input-group" style={{ flex: 1 }}>
-                    <label>Assign to</label>
-                    <select
-                      className="input"
-                      value={taskForm.assigned_to}
-                      onChange={(e) => setTaskForm({ ...taskForm, assigned_to: e.target.value })}
-                    >
-                      <option value="">Unassigned</option>
-                      {members.map((m) => (
-                        <option key={m.user_id} value={m.user_id}>
-                          {m.user_display_name}
-                        </option>
-                      ))}
+                    <label>Priority</label>
+                    <select className="input" value={taskForm.priority}
+                      onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value })}>
+                      {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                     </select>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Assign to</label>
+                    <select className="input" value={taskForm.assigned_to}
+                      onChange={(e) => setTaskForm({ ...taskForm, assigned_to: e.target.value })}>
+                      <option value="">Unassigned</option>
+                      {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.user_display_name}</option>)}
+                    </select>
+                  </div>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Due Date</label>
+                    <input type="date" className="input" value={taskForm.due_date}
+                      onChange={(e) => setTaskForm({ ...taskForm, due_date: e.target.value })} />
                   </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => { setShowTaskModal(false); setEditingTask(null); resetTaskForm(); }}
-                >
-                  Cancel
-                </button>
+                <button type="button" className="btn btn-secondary"
+                  onClick={() => { setShowTaskModal(false); setEditingTask(null); resetTaskForm(); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary">
                   {editingTask ? 'Save Changes' : 'Create Task'}
                 </button>

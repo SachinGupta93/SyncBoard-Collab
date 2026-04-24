@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, DateTime, ForeignKey, Text
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -21,6 +21,12 @@ class Task(Base):
     )
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    priority: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="medium", index=True
+    )
+    due_date: Mapped[datetime | None] = mapped_column(
+        Date, nullable=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
